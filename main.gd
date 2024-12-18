@@ -8,6 +8,7 @@ var session : NakamaSession
 var socket : NakamaSocket
 var multiplayer_bridge : NakamaMultiplayerBridge
 var start_game_count : int = 0
+var match_id : String = ""
 
 
 # Called when the node enters the scene tree for the first time.
@@ -17,6 +18,12 @@ func _ready() -> void:
 	socket.connected.connect(self._on_socket_connected)
 	socket.closed.connect(self._on_socket_closed)
 	socket.received_error.connect(self._on_socket_error)
+	if "--server" in OS.get_cmdline_args():
+		for arg in OS.get_cmdline_args():
+			if arg.begins_with("--matchid="):
+				match_id = arg.split("=")[1]
+				set_host()
+				
 
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -41,6 +48,7 @@ func _on_login_button_pressed() -> void:
 func _on_socket_connected() -> void:
 	print("Socket connected.")
 
+
 func _on_socket_closed() -> void:
 	print("Socket closed.")
 
@@ -53,7 +61,12 @@ func _on_match_join_error(error) -> void:
 func _on_match_joined() -> void:
 	PlayerManager.add_player(multiplayer.get_unique_id())
 	PlayerManager.set_my_peer_id(multiplayer.get_unique_id())
+	print(multiplayer_bridge.match_id)
 	print("Match joined.")
+	await get_tree().create_timer(2.0).timeout
+	if match_id != "":
+		set_host_peer_id.rpc(multiplayer.get_unique_id())
+		start_game.rpc()
 
 func _on_peer_connected(peer_id) -> void:
 	PlayerManager.add_player(peer_id)
@@ -66,6 +79,7 @@ func _on_peer_disconnected(peer_id) -> void:
 
 func _on_cj_match_button_pressed() -> void:
 	multiplayer_bridge.join_named_match($CanvasLayer/Panel2/MatchNameLineEdit.text)
+	
 
 @rpc("any_peer")
 func sync_player_list(players : Array[int]) -> void:
@@ -107,6 +121,7 @@ func _on_host_button_pressed() -> void:
 @rpc("any_peer", "call_local")
 func set_host_peer_id(peer_id : int) -> void:
 	PlayerManager.set_host_peer_id(peer_id)
+	print("set host peer id: ", peer_id)
 
 func _on_login_test_1_button_pressed() -> void:
 	var  email = "test1@test.com"
@@ -139,6 +154,9 @@ func _on_login_test_2_button_pressed() -> void:
 	multiplayer.peer_disconnected.connect(self._on_peer_disconnected)
 
 func _on_login_test_3_button_pressed() -> void:
+	set_host()
+
+func set_host():
 	var  email = "test3@test.com"
 	var password = "password"
 	session = await client.authenticate_email_async(email, password)
@@ -152,3 +170,7 @@ func _on_login_test_3_button_pressed() -> void:
 	multiplayer.set_multiplayer_peer(multiplayer_bridge.multiplayer_peer)
 	multiplayer.peer_connected.connect(self._on_peer_connected)
 	multiplayer.peer_disconnected.connect(self._on_peer_disconnected)
+	await get_tree().create_timer(2.0).timeout
+	if match_id != "":
+		multiplayer_bridge.join_match(match_id)
+		
